@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
-import type { ApiTask, ApiProjectMember, TaskStatus } from "@/types";
+import type { ApiComment, ApiTask, ApiProjectMember, TaskStatus } from "@/types";
 import { STATUS_LABELS, STATUS_ORDER } from "@/types";
 
 type Props = {
@@ -19,6 +19,7 @@ export function TaskDetail({ task, projectId, members, onClose }: Props) {
   const [description, setDescription] = useState(task.description ?? "");
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [assigneeId, setAssigneeId] = useState<string>(task.assigneeId ?? "");
+  const [commentBody, setCommentBody] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const updateTask = useMutation({
@@ -42,6 +43,24 @@ export function TaskDetail({ task, projectId, members, onClose }: Props) {
       onClose();
     },
     onError: (err) => setError(err instanceof Error ? err.message : "delete failed"),
+  });
+
+  const { data: commentsData, refetch: refetchComments } = useQuery({
+    queryKey: ["task-comments", task.id],
+    queryFn: () => apiFetch<{ comments: ApiComment[] }>(`/api/tasks/${task.id}/comments`),
+  });
+
+  const createComment = useMutation({
+    mutationFn: (body: string) =>
+      apiFetch<{ comment: ApiComment }>(`/api/tasks/${task.id}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      }),
+    onSuccess: () => {
+      setCommentBody("");
+      refetchComments();
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : "comment failed"),
   });
 
   function onSave() {
@@ -129,7 +148,45 @@ export function TaskDetail({ task, projectId, members, onClose }: Props) {
           </p>
         )}
 
-        <div className="flex items-center justify-between gap-3">
+        <section className="mt-6 border-t border-border pt-4">
+          <h3 className="text-sm font-medium mb-3">comments</h3>
+          <div className="space-y-3 mb-3">
+            {(commentsData?.comments ?? []).map((comment) => (
+              <div key={comment.id} className="rounded-md border border-border bg-bg p-3">
+                <div className="flex items-center justify-between text-xs text-muted mb-1">
+                  <span>{comment.author.name}</span>
+                  <span>{new Date(comment.createdAt).toLocaleString()}</span>
+                </div>
+                <p className="text-sm text-white whitespace-pre-wrap">{comment.body}</p>
+              </div>
+            ))}
+            {!commentsData?.comments?.length && (
+              <p className="text-sm text-muted">No comments yet.</p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <textarea
+              value={commentBody}
+              onChange={(e) => setCommentBody(e.target.value)}
+              rows={3}
+              placeholder="add a comment"
+              className="flex-1 rounded-md bg-bg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none"
+            />
+            <button
+              onClick={() => {
+                if (!commentBody.trim()) return;
+                setError(null);
+                createComment.mutate(commentBody.trim());
+              }}
+              disabled={createComment.isPending}
+              className="self-end rounded-md bg-accent px-3 py-2 text-sm text-white hover:bg-indigo-500 disabled:opacity-50"
+            >
+              {createComment.isPending ? "posting…" : "post"}
+            </button>
+          </div>
+        </section>
+
+        <div className="flex items-center justify-between gap-3 mt-6">
           <button
             onClick={() => deleteTask.mutate()}
             disabled={deleteTask.isPending}
