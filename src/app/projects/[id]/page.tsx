@@ -45,6 +45,20 @@ export default function ProjectPage({ params }: PageProps) {
     onError: (err) => setError(err instanceof Error ? err.message : "create failed"),
   });
 
+  const exportToAirtable = useMutation({
+    mutationFn: () => apiFetch<{ ok: true; result: { created: number; updated: number; failed: number; errors: string[] } }>(`/api/projects/${id}/export`, { method: "POST" }),
+    onSuccess: (data) => {
+      setError(null);
+      const summary = [
+        `exported tasks to Airtable`,
+        // data.result.updated ? `updated ${data.result.updated} existing record(s)` : null,
+        // data.result.failed ? `skipped ${data.result.failed} failed record(s)` : null,
+      ].filter(Boolean).join("; ");
+      window.alert(summary || "export completed");
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : "export failed"),
+  });
+
   const project = data?.project;
   const tasksByStatus: Record<TaskStatus, ApiTask[]> = {
     todo: [],
@@ -94,7 +108,17 @@ export default function ProjectPage({ params }: PageProps) {
             </div>
 
             <section className="bg-surface border border-border rounded-lg p-4 mb-6">
-              <h2 className="text-sm font-medium mb-3">add a task</h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-medium">add a task</h2>
+                <button
+                  type="button"
+                  onClick={() => exportToAirtable.mutate()}
+                  disabled={exportToAirtable.isPending}
+                  className="text-sm rounded-md border border-accent px-3 py-2 text-accent hover:bg-accent/10 disabled:opacity-50"
+                >
+                  {exportToAirtable.isPending ? "exporting…" : "export to Airtable"}
+                </button>
+              </div>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
